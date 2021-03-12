@@ -1,3 +1,4 @@
+# -*- coding: future_annotations -*-
 # Copyright (c) 2018-     Xilinx, Inc              (Alessandro Pappalardo)
 # Copyright (c) 2016-     Facebook, Inc            (Adam Paszke)
 # Copyright (c) 2014-     Facebook, Inc            (Soumith Chintala)
@@ -38,7 +39,8 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from typing import Callable, Union, Optional
+from abc import ABC, abstractmethod
+from typing import Callable, Union, Optional, TYPE_CHECKING
 import math
 
 import torch
@@ -46,13 +48,35 @@ from torch import Tensor
 from torch.nn import Module
 
 import brevitas
-from brevitas.inject.enum import RestrictValueType, FloatToIntImplType  # retrocompatibility
+from brevitas.inject.enum import RestrictValueType, FloatToIntImplType  # noqa for retrocomp
 
 from brevitas.core.function_wrapper import Identity, PowerOfTwo, LogTwo, InplaceLogTwo
 from brevitas.core.function_wrapper import ScalarClampMinSte, RoundSte
 
-assert RestrictValueType  # prevent removal of unused import
-assert FloatToIntImplType
+
+class RestrictValueInterface(Module, ABC):
+
+    @abstractmethod
+    def restrict_init_float(self, x: float) -> float:
+        pass
+
+    @abstractmethod
+    def restrict_init_tensor(self, x: Tensor) -> Tensor:
+        pass
+
+    @abstractmethod
+    def restrict_init_module(self) -> Module:
+        pass
+
+    @abstractmethod
+    def restrict_init_inplace_module(self) -> Module:
+        pass
+
+
+if TYPE_CHECKING or brevitas.config.JIT_ENABLED:
+    RestrictValue = RestrictValueInterface
+else:
+    RestrictValue = brevitas.jit.ScriptModule
 
 
 class _RestrictClampValue(brevitas.jit.ScriptModule):
@@ -79,7 +103,7 @@ class _RestrictClampValue(brevitas.jit.ScriptModule):
         return self.restrict_value_impl(x)
 
 
-class FloatRestrictValue(brevitas.jit.ScriptModule):
+class FloatRestrictValue(RestrictValueInterface):
 
     def __init__(self) -> None:
         super(FloatRestrictValue, self).__init__()
@@ -101,7 +125,7 @@ class FloatRestrictValue(brevitas.jit.ScriptModule):
         return x
 
 
-class LogFloatRestrictValue(brevitas.jit.ScriptModule):
+class LogFloatRestrictValue(RestrictValueInterface):
 
     def __init__(self):
         super(LogFloatRestrictValue, self).__init__()
@@ -125,7 +149,7 @@ class LogFloatRestrictValue(brevitas.jit.ScriptModule):
         return x
 
 
-class IntRestrictValue(brevitas.jit.ScriptModule):
+class IntRestrictValue(RestrictValueInterface):
 
     def __init__(self, restrict_value_float_to_int_impl: Module = RoundSte()):
         super(IntRestrictValue, self).__init__()
@@ -149,7 +173,7 @@ class IntRestrictValue(brevitas.jit.ScriptModule):
         return x
 
 
-class PowerOfTwoRestrictValue(brevitas.jit.ScriptModule):
+class PowerOfTwoRestrictValue(RestrictValueInterface):
 
     def __init__(self, restrict_value_float_to_int_impl: Module = RoundSte()):
         super(PowerOfTwoRestrictValue, self).__init__()
